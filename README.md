@@ -1,79 +1,134 @@
-# GOST Cascade Menu
+# GOST Cascade Manager 🇷🇺➡️🌍
 
-Emergency independent cascade based on GOST v3:
+Готовое меню для создания аварийного независимого каскада на базе **GOST v3**.
 
-```text
-Client -> RU VPS SOCKS5 -> Foreign VPS -> Internet
+Схема работы:
+
+```
+Клиент → RU VPS (SOCKS5) → Foreign VPS → Интернет
 ```
 
-This does **not** touch Xray, sing-box, 3x-ui, nginx, or existing configs. It creates only:
+Проект не использует и не изменяет:
+
+- Xray-core
+- sing-box
+- 3x-ui
+- nginx
+- существующие VPN конфиги
+
+Создаются только:
 
 - `/usr/local/bin/gost`
 - `/usr/local/bin/gost-menu`
 - `/etc/gost-cascade/`
 - `/etc/systemd/system/gost.service`
 
-## Install
+---
+
+## 🚀 Быстрая установка
+
+Одна команда:
 
 ```bash
-sudo bash gost-menu.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh)
 ```
 
-Or after uploading to GitHub:
+После установки меню вызывается командой:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/gost-cascade-menu/main/gost-menu.sh)
+gost-menu
 ```
 
-## Recommended setup
+---
 
-### 1. On Foreign VPS
+# Возможности меню
 
-Run menu item:
+- 🇷🇺 Русский язык
+- 🇬🇧 Английский язык
+- Установка Foreign VPS
+- Установка RU Cascade VPS
+- Проверка статуса
+- Перезапуск службы
+- Просмотр логов
+- Полное удаление
+- Обновление скрипта напрямую с GitHub
 
-```text
-1) Install FOREIGN exit node: relay+tls
+---
+
+# Рекомендуемая установка
+
+## 1. Foreign VPS
+
+Сначала запускаем меню на иностранном сервере.
+
+Выбираем:
+
+```
+Установить Foreign VPS
 ```
 
-or:
+Он станет выходным сервером.
 
-```text
-2) Install FOREIGN exit node: relay+wss self-signed
+---
+
+## 2. RU VPS
+
+Потом запускаем меню на российском сервере.
+
+Выбираем:
+
+```
+Установить RU Cascade VPS
 ```
 
-The script will print the forward URL for the RU server.
+Вводим IP Foreign VPS.
 
-### 2. On RU VPS
+Готовая схема:
 
-Run menu item:
-
-```text
-3) Install RU middle node: local SOCKS5 -> foreign
+```
+ПК
+ ↓
+RU VPS
+ ↓
+Foreign VPS
+ ↓
+Internet
 ```
 
-Paste the foreign forward URL.
+---
 
-### 3. On PC/client
+# Управление
 
-Use SOCKS5:
+Статус:
 
-```text
-Host: RU_VPS_IP
-Port: 1080
+```bash
+systemctl status gost
 ```
 
-Check external IP. It should be the Foreign VPS IP.
+Логи:
 
-## Update from GitHub
-
-Menu item 9 downloads the raw script URL and replaces `/usr/local/bin/gost-menu`.
-
-Before publishing, replace this placeholder in `gost-menu.sh`:
-
-```text
-https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/gost-cascade-menu/main/gost-menu.sh
+```bash
+journalctl -u gost -f
 ```
 
-## Remove
+Перезапуск:
 
-Menu item 10 removes only this GOST cascade installation.
+```bash
+systemctl restart gost
+```
+
+---
+
+# Обновление
+
+В меню выбрать:
+
+```
+9) Обновить с GitHub
+```
+
+Скрипт сам скачает свежую версию.
+
+---
+
+GOST Cascade Manager — резервный каскад, независимый от Xray и sing-box.
