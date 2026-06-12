@@ -1,3 +1,6 @@
 #!/usr/bin/env bash
 set -e
-sudo bash ./gost-menu.sh
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+  exec sudo bash "$0" "$@"
+fi
+bash ./gost-menu.sh
