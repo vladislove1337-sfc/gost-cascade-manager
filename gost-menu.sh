@@ -11,11 +11,7 @@ LANG_FILE="$CONFIG_DIR/lang"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 RAW_URL="https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 LANGUAGE="ru"
 
 ok(){ echo -e "${GREEN}$*${NC}"; }
@@ -31,16 +27,10 @@ need_root(){
 }
 
 make_config_dir(){ mkdir -p "$CONFIG_DIR"; chmod 700 "$CONFIG_DIR"; }
-
 load_language(){
-  if [[ -f "$LANG_FILE" ]]; then
-    LANGUAGE="$(cat "$LANG_FILE" 2>/dev/null || echo ru)"
-  else
-    LANGUAGE="ru"
-  fi
+  if [[ -f "$LANG_FILE" ]]; then LANGUAGE="$(cat "$LANG_FILE" 2>/dev/null || echo ru)"; else LANGUAGE="ru"; fi
   [[ "$LANGUAGE" == "en" || "$LANGUAGE" == "ru" ]] || LANGUAGE="ru"
 }
-
 save_language(){ make_config_dir; echo "$LANGUAGE" > "$LANG_FILE"; }
 
 msg(){
@@ -55,26 +45,17 @@ msg(){
     *) echo "$key" ;;
   esac
 }
-
 pause(){ local p; p="$(msg pause)"; read -rp "$p" _ || true; }
-
 ask(){
   local prompt="$1" default="${2:-}" value
-  if [[ -n "$default" ]]; then
-    read -rp "$prompt [$default]: " value
-    echo "${value:-$default}"
-  else
-    read -rp "$prompt: " value
-    echo "$value"
-  fi
+  if [[ -n "$default" ]]; then read -rp "$prompt [$default]: " value; echo "${value:-$default}"; else read -rp "$prompt: " value; echo "$value"; fi
 }
-
 random_string(){ openssl rand -hex 12; }
 
 install_deps(){
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
-  apt-get install -y curl wget tar gzip ca-certificates jq openssl
+  apt-get install -y curl wget tar gzip ca-certificates jq openssl qrencode netcat-openbsd
 }
 
 detect_arch(){
@@ -90,7 +71,7 @@ detect_arch(){
 latest_gost_version(){
   local version
   version="$(curl -fsSL https://api.github.com/repos/go-gost/gost/releases/latest | jq -r '.tag_name' | sed 's/^v//' || true)"
-  if [[ -z "$version" || "$version" == "null" ]]; then version="3.2.3"; fi
+  if [[ -z "$version" || "$version" == "null" ]]; then version="3.2.6"; fi
   echo "$version"
 }
 
@@ -116,7 +97,11 @@ write_config(){
 MODE="$1"
 LISTEN="$2"
 FORWARD="$3"
-COMMENT="$4"
+SOCKS_USER="${4:-}"
+SOCKS_PASS="${5:-}"
+SOCKS_PORT="${6:-}"
+FOREIGN_IP="${7:-}"
+COMMENT="$8"
 EOF_CFG
   chmod 600 "$CONFIG_FILE"
 }
@@ -160,26 +145,27 @@ EOF_SERVICE
   fi
   systemctl daemon-reload
   systemctl enable --now "$SERVICE_NAME"
+  systemctl restart "$SERVICE_NAME"
 }
 
 install_foreign_tls(){
   install_gost_binary; make_config_dir
   local user pass port listen url
-  user="$(ask 'Логин для FOREIGN' 'gost')"
+  user="$(ask 'Логин для FOREIGN' 'prado')"
   pass="$(ask 'Пароль для FOREIGN' "$(random_string)")"
   port="$(ask 'Порт FOREIGN' '443')"
-  listen="relay+tls://${user}:${pass}@:${port}"
-  url="relay+tls://${user}:${pass}@FOREIGN_IP:${port}"
+  listen="socks5+tls://${user}:${pass}@:${port}"
+  url="socks5+tls://${user}:${pass}@FOREIGN_IP:${port}"
   write_service "$listen"
-  write_config "foreign-relay-tls" "$listen" "" "FOREIGN выходной узел relay+tls"
-  ok "FOREIGN VPS установлен в режиме relay+tls."
+  write_config "foreign-socks5-tls" "$listen" "" "" "" "" "" "FOREIGN выходной узел socks5+tls"
+  ok "FOREIGN VPS установлен в режиме socks5+tls."
   echo; warn "На RU VPS в пункте установки укажи такой URL, заменив FOREIGN_IP на IP иностранного VPS:"; echo "$url"
 }
 
 install_foreign_wss(){
   install_gost_binary; make_config_dir
   local user pass port path domain cert key listen url
-  user="$(ask 'Логин для FOREIGN' 'gost')"
+  user="$(ask 'Логин для FOREIGN' 'prado')"
   pass="$(ask 'Пароль для FOREIGN' "$(random_string)")"
   port="$(ask 'Порт FOREIGN' '443')"
   path="$(ask 'WSS путь' '/api/socket')"
@@ -187,30 +173,84 @@ install_foreign_wss(){
   cert="$CONFIG_DIR/cert.pem"; key="$CONFIG_DIR/key.pem"
   openssl req -x509 -newkey rsa:2048 -nodes -keyout "$key" -out "$cert" -days 3650 -subj "/CN=$domain" >/dev/null 2>&1
   chmod 600 "$cert" "$key"
-  listen="relay+wss://${user}:${pass}@:${port}?path=${path}&certFile=${cert}&keyFile=${key}"
-  url="relay+wss://${user}:${pass}@FOREIGN_IP:${port}?path=${path}&secure=true"
+  listen="socks5+wss://${user}:${pass}@:${port}?path=${path}&certFile=${cert}&keyFile=${key}"
+  url="socks5+wss://${user}:${pass}@FOREIGN_IP:${port}?path=${path}&secure=true"
   write_service "$listen"
-  write_config "foreign-relay-wss-selfsigned" "$listen" "" "FOREIGN выходной узел relay+wss self-signed"
-  ok "FOREIGN VPS установлен в режиме relay+wss self-signed."
+  write_config "foreign-socks5-wss-selfsigned" "$listen" "" "" "" "" "" "FOREIGN выходной узел socks5+wss self-signed"
+  ok "FOREIGN VPS установлен в режиме socks5+wss self-signed."
   echo; warn "На RU VPS в пункте установки укажи такой URL, заменив FOREIGN_IP на IP иностранного VPS:"; echo "$url"
 }
 
 install_ru_node(){
   install_gost_binary; make_config_dir
-  local port foreign_url socks_user socks_pass listen
+  local port foreign_url socks_user socks_pass listen foreign_ip
   port="$(ask 'Локальный SOCKS5 порт на RU VPS' '1080')"
-  foreign_url="$(ask 'URL FOREIGN узла, например relay+tls://user:pass@1.2.3.4:443')"
-  socks_user="$(ask 'Логин SOCKS5 на RU VPS, пусто = без авторизации' '')"
+  foreign_url="$(ask 'URL FOREIGN узла, например socks5+tls://user:pass@194.116.172.222:443')"
+  socks_user="$(ask 'Логин SOCKS5 на RU VPS, пусто = без авторизации' 'prado')"
   if [[ -n "$socks_user" ]]; then
     socks_pass="$(ask 'Пароль SOCKS5 на RU VPS' "$(random_string)")"
     listen="socks5://${socks_user}:${socks_pass}@:${port}"
   else
+    socks_pass=""
     listen="socks5://:${port}"
   fi
+  foreign_ip="$(echo "$foreign_url" | sed -E 's#^[^@]+@([^:/?]+).*#\1#')"
   write_service "$listen" "$foreign_url"
-  write_config "ru-socks-to-foreign" "$listen" "$foreign_url" "RU промежуточный узел: SOCKS5 -> FOREIGN"
+  write_config "ru-socks-to-foreign" "$listen" "$foreign_url" "$socks_user" "$socks_pass" "$port" "$foreign_ip" "RU промежуточный узел: SOCKS5 -> FOREIGN"
   ok "RU VPS установлен."
   echo; warn "В клиенте подключайся к RU VPS:"; echo "SOCKS5: RU_IP:${port}"
+  show_client_link
+}
+
+get_public_ip(){
+  curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}'
+}
+
+load_config_env(){
+  if [[ ! -f "$CONFIG_FILE" ]]; then err "Конфиг не найден: $CONFIG_FILE"; return 1; fi
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+}
+
+show_client_link(){
+  load_config_env || return 0
+  if [[ "${MODE:-}" != "ru-socks-to-foreign" ]]; then
+    warn "QR/ссылка нужны на RU узле. Сейчас режим: ${MODE:-unknown}"
+    return 0
+  fi
+  local ip link
+  ip="$(ask 'IP или домен RU VPS для ссылки' "$(get_public_ip)")"
+  if [[ -n "${SOCKS_USER:-}" ]]; then
+    link="socks://${SOCKS_USER}:${SOCKS_PASS}@${ip}:${SOCKS_PORT}"
+  else
+    link="socks://${ip}:${SOCKS_PORT}"
+  fi
+  echo
+  info "Ссылка подключения SOCKS5:"
+  echo "$link"
+  echo
+  info "Данные для v2rayN:"
+  echo "Тип: SOCKS"
+  echo "Адрес: $ip"
+  echo "Порт: ${SOCKS_PORT}"
+  echo "Логин: ${SOCKS_USER:-без логина}"
+  echo "Пароль: ${SOCKS_PASS:-без пароля}"
+  echo
+  if command -v qrencode >/dev/null 2>&1; then
+    info "QR-code:"
+    qrencode -t ANSIUTF8 "$link" || true
+  else
+    warn "qrencode не установлен. Установи: apt install -y qrencode"
+  fi
+}
+
+test_cascade(){
+  load_config_env || return 0
+  if [[ "${MODE:-}" != "ru-socks-to-foreign" ]]; then warn "Тест запускается на RU узле."; return 0; fi
+  local proxy
+  if [[ -n "${SOCKS_USER:-}" ]]; then proxy="socks5h://${SOCKS_USER}:${SOCKS_PASS}@127.0.0.1:${SOCKS_PORT}"; else proxy="socks5h://127.0.0.1:${SOCKS_PORT}"; fi
+  info "Проверяю внешний IP через локальный SOCKS5..."
+  curl -x "$proxy" --max-time 15 https://api.ipify.org ; echo
 }
 
 show_status(){
@@ -218,10 +258,11 @@ show_status(){
   if [[ -x "$BIN_PATH" ]]; then "$BIN_PATH" -V || true; else echo "Не установлен"; fi
   echo; info "Конфигурация:"
   if [[ -f "$CONFIG_FILE" ]]; then cat "$CONFIG_FILE"; else echo "Конфигурация не найдена"; fi
+  echo; info "Слушающие порты:"
+  ss -lntp | grep gost || true
   echo; info "Служба systemd:"
   systemctl --no-pager status "$SERVICE_NAME" || true
 }
-
 show_logs(){ journalctl -u "$SERVICE_NAME" -n 120 --no-pager || true; }
 restart_service(){ systemctl restart "$SERVICE_NAME"; systemctl --no-pager status "$SERVICE_NAME" || true; }
 stop_service(){ systemctl stop "$SERVICE_NAME" || true; ok "Служба остановлена."; }
@@ -229,9 +270,7 @@ install_menu_command(){ install -m 0755 "$0" "$MENU_PATH"; ok "Команда у
 
 self_update(){
   local url
-  echo
-  info "Обновление меню с GitHub"
-  echo "Текущая ссылка: $RAW_URL"
+  echo; info "Обновление меню с GitHub"; echo "Текущая ссылка: $RAW_URL"
   url="$(ask 'Raw-ссылка на gost-menu.sh' "$RAW_URL")"
   curl -fL "$url" -o /tmp/gost-menu.new
   bash -n /tmp/gost-menu.new
@@ -243,10 +282,10 @@ self_update(){
 uninstall_all(){
   warn "Будет удалён только GOST Cascade Manager."
   warn "Xray, sing-box, 3x-ui, nginx и другие конфиги НЕ трогаются."
-  echo
-  read -rp "Для удаления введи DELETE: " confirm
+  echo; read -rp "Для удаления введи DELETE: " confirm
   if [[ "$confirm" != "DELETE" ]]; then warn "$(msg cancel)"; return; fi
   systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
+  pkill -9 gost 2>/dev/null || true
   rm -f "$SERVICE_FILE"; systemctl daemon-reload
   rm -rf "$CONFIG_DIR"; rm -f "$BIN_PATH" "$MENU_PATH"
   ok "GOST Cascade Manager полностью удалён."
@@ -255,8 +294,7 @@ uninstall_all(){
 language_menu(){
   make_config_dir
   echo; info "Выбор языка / Language"
-  echo "1) Русский"
-  echo "2) English"
+  echo "1) Русский"; echo "2) English"
   read -rp "> " lang_choice
   case "$lang_choice" in 2) LANGUAGE="en" ;; *) LANGUAGE="ru" ;; esac
   save_language
@@ -265,8 +303,8 @@ language_menu(){
 print_menu_ru(){
   echo -e "${BLUE}=== GOST Cascade Manager ===${NC}"
   echo
-  echo "1) Установить FOREIGN выходной узел: relay+tls"
-  echo "2) Установить FOREIGN выходной узел: relay+wss self-signed"
+  echo "1) Установить FOREIGN выходной узел: socks5+tls  РЕКОМЕНДУЕТСЯ"
+  echo "2) Установить FOREIGN выходной узел: socks5+wss self-signed"
   echo "3) Установить RU промежуточный узел: локальный SOCKS5 -> FOREIGN"
   echo "4) Статус / конфигурация"
   echo "5) Логи"
@@ -276,14 +314,15 @@ print_menu_ru(){
   echo "9) Обновить меню с GitHub"
   echo "10) Полностью удалить GOST cascade"
   echo "11) Сменить язык"
+  echo "12) Показать ссылку подключения и QR-code"
+  echo "13) Проверить каскад через api.ipify.org"
   echo "0) Выход"
 }
-
 print_menu_en(){
   echo -e "${BLUE}=== GOST Cascade Manager ===${NC}"
   echo
-  echo "1) Install FOREIGN exit node: relay+tls"
-  echo "2) Install FOREIGN exit node: relay+wss self-signed"
+  echo "1) Install FOREIGN exit node: socks5+tls RECOMMENDED"
+  echo "2) Install FOREIGN exit node: socks5+wss self-signed"
   echo "3) Install RU middle node: local SOCKS5 -> FOREIGN"
   echo "4) Status / config"
   echo "5) Logs"
@@ -293,6 +332,8 @@ print_menu_en(){
   echo "9) Update menu from GitHub"
   echo "10) Remove GOST cascade completely"
   echo "11) Change language"
+  echo "12) Show connection link and QR-code"
+  echo "13) Test cascade through api.ipify.org"
   echo "0) Exit"
 }
 
@@ -314,6 +355,8 @@ main_menu(){
       9) self_update; pause ;;
       10) uninstall_all; pause ;;
       11) language_menu; pause ;;
+      12) show_client_link; pause ;;
+      13) test_cascade; pause ;;
       0) exit 0 ;;
       *) warn "$(msg wrong)"; sleep 1 ;;
     esac

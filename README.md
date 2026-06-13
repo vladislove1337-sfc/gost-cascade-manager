@@ -1,111 +1,117 @@
 # GOST Cascade Manager
 
-Готовое меню для аварийного каскада на **GOST v3**.
-
-Схема:
+Меню для аварийного каскада на GOST v3:
 
 ```text
-Клиент -> RU VPS SOCKS5 -> FOREIGN VPS -> Интернет
+Клиент -> RU VPS SOCKS5 -> FOREIGN VPS socks5+tls -> Интернет
 ```
 
-Скрипт **не трогает** Xray, sing-box, 3x-ui, nginx и уже существующие конфиги. Он создаёт только:
+Это отдельная резервная схема. Она не трогает Xray, sing-box, 3x-ui, nginx и существующие конфиги.
 
-- `/usr/local/bin/gost`
-- `/usr/local/bin/gost-menu`
-- `/etc/gost-cascade/`
-- `/etc/systemd/system/gost.service`
-
-## Быстрая установка с GitHub
+## Установка одной командой
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh)
 ```
 
-## Локальный запуск после загрузки файлов на VPS
+## Что изменено в этой версии
 
-```bash
-sudo bash gost-menu.sh
-```
+- Основной рабочий режим заменён на `socks5+tls`.
+- Убран проблемный `relay+tls` для базового каскада.
+- Добавлен пункт показа ссылки подключения.
+- Добавлен QR-code через `qrencode`.
+- Добавлен тест каскада через `api.ipify.org`.
+- Меню по умолчанию на русском.
 
-## Рекомендуемая установка
+## Рекомендуемая настройка
 
 ### 1. На FOREIGN VPS
 
-Сначала запускаешь меню на иностранном VPS и выбираешь один из пунктов:
+Запусти меню и выбери:
 
 ```text
-1) Установить FOREIGN выходной узел: relay+tls
+1) Установить FOREIGN выходной узел: socks5+tls
 ```
 
-или:
+Пример результата:
 
 ```text
-2) Установить FOREIGN выходной узел: relay+wss self-signed
+socks5+tls://prado:1234567890@FOREIGN_IP:443
 ```
 
-После установки скрипт покажет URL вида:
-
-```text
-relay+tls://user:password@FOREIGN_IP:443
-```
-
-Вместо `FOREIGN_IP` подставь реальный IP иностранного VPS.
+Скопируй эту ссылку и замени `FOREIGN_IP` на настоящий IP иностранного VPS.
 
 ### 2. На RU VPS
 
-На российском VPS запускаешь меню и выбираешь:
+Запусти меню и выбери:
 
 ```text
 3) Установить RU промежуточный узел: локальный SOCKS5 -> FOREIGN
 ```
 
-Когда скрипт спросит URL FOREIGN узла — вставляешь ссылку, полученную на иностранном сервере.
-
-### 3. На клиенте
-
-В клиенте добавляешь обычный SOCKS5:
+В поле FOREIGN URL вставь ссылку вида:
 
 ```text
-Адрес: RU_IP
-Порт: 1080
+socks5+tls://prado:1234567890@194.116.172.222:443
 ```
 
-После подключения сайты должны видеть IP иностранного VPS.
-
-## Команда меню
-
-Чтобы поставить короткую команду:
+После установки выбери:
 
 ```text
-8) Установить команду gost-menu
+12) Показать ссылку подключения и QR-code
 ```
 
-После этого меню запускается так:
+## Проверка
+
+На RU VPS:
 
 ```bash
-gost-menu
+curl -x socks5h://USER:PASS@127.0.0.1:1080 https://api.ipify.org ; echo
 ```
+
+Должен вернуться IP FOREIGN VPS.
+
+## v2rayN
+
+Добавь сервер типа SOCKS:
+
+```text
+Адрес: IP RU VPS
+Порт: 1080
+Логин: указанный логин
+Пароль: указанный пароль
+```
+
+Сайты должны видеть IP иностранного VPS.
 
 ## Обновление
 
-В меню есть пункт:
+В меню выбери:
 
 ```text
 9) Обновить меню с GitHub
 ```
 
-Ссылка уже прописана:
+Или вручную:
 
-```text
-https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh
+```bash
+curl -fsSL https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh -o /usr/local/bin/gost-menu
+chmod +x /usr/local/bin/gost-menu
 ```
 
 ## Удаление
 
-Для полного удаления только GOST-каскада:
+В меню выбери:
 
 ```text
 10) Полностью удалить GOST cascade
 ```
 
-Xray, sing-box, 3x-ui, nginx и остальные сервисы не удаляются.
+Удаляются только:
+
+```text
+/usr/local/bin/gost
+/usr/local/bin/gost-menu
+/etc/gost-cascade/
+/etc/systemd/system/gost.service
+```
