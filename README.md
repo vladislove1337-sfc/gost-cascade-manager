@@ -13,6 +13,12 @@
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh)
 ```
+## 🚀 Запуск меню после установки
+
+После первой установки можно открыть менеджер командой:
+
+```bash
+gost-menu
 
 ## Что изменено в этой версии
 
