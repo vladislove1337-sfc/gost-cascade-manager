@@ -181,6 +181,30 @@ install_foreign_wss(){
   echo; warn "На RU VPS в пункте установки укажи такой URL, заменив FOREIGN_IP на IP иностранного VPS:"; echo "$url"
 }
 
+
+install_foreign_relay_wss(){
+  install_gost_binary; make_config_dir
+  local user pass port path domain cert key listen url
+  user="$(ask 'Логин для FOREIGN relay+wss' 'prado')"
+  pass="$(ask 'Пароль для FOREIGN relay+wss' "$(random_string)")"
+  port="$(ask 'Порт FOREIGN relay+wss' '443')"
+  path="$(ask 'WSS путь' '/api/socket')"
+  domain="$(ask 'Домен для self-signed сертификата CN' 'example.com')"
+  cert="$CONFIG_DIR/relay-wss-cert.pem"; key="$CONFIG_DIR/relay-wss-key.pem"
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout "$key" -out "$cert" -days 3650 -subj "/CN=$domain" >/dev/null 2>&1
+  chmod 600 "$cert" "$key"
+  listen="relay+wss://:${port}?auth=${user}:${pass}&path=${path}&certFile=${cert}&keyFile=${key}"
+  url="relay+wss://${user}:${pass}@FOREIGN_IP:${port}?path=${path}"
+  write_service "$listen"
+  write_config "foreign-relay-wss-selfsigned" "$listen" "" "" "" "" "" "FOREIGN выходной узел relay+wss self-signed"
+  ok "FOREIGN VPS установлен в режиме relay+wss self-signed."
+  echo
+  warn "На RU VPS в пункте 3 укажи такой URL, заменив FOREIGN_IP на IP иностранного VPS:"
+  echo "$url"
+  echo
+  warn "Важно: если используешь self-signed сертификат, проверка сертификата на клиентской стороне должна быть выключена. В GOST secure по умолчанию false."
+}
+
 install_ru_node(){
   install_gost_binary; make_config_dir
   local port foreign_url socks_user socks_pass listen foreign_ip
@@ -316,6 +340,7 @@ print_menu_ru(){
   echo "11) Сменить язык"
   echo "12) Показать ссылку подключения и QR-code"
   echo "13) Проверить каскад через api.ipify.org"
+  echo "14) Установить FOREIGN выходной узел: relay+wss  ЭКСПЕРИМЕНТАЛЬНО"
   echo "0) Выход"
 }
 print_menu_en(){
@@ -334,6 +359,7 @@ print_menu_en(){
   echo "11) Change language"
   echo "12) Show connection link and QR-code"
   echo "13) Test cascade through api.ipify.org"
+  echo "14) Install FOREIGN exit node: relay+wss EXPERIMENTAL"
   echo "0) Exit"
 }
 
@@ -357,6 +383,7 @@ main_menu(){
       11) language_menu; pause ;;
       12) show_client_link; pause ;;
       13) test_cascade; pause ;;
+      14) install_foreign_relay_wss; pause ;;
       0) exit 0 ;;
       *) warn "$(msg wrong)"; sleep 1 ;;
     esac
