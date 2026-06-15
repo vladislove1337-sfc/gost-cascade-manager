@@ -424,7 +424,34 @@ show_status(){
 show_logs(){ journalctl -u "$SERVICE_NAME" -n 120 --no-pager || true; }
 restart_service(){ systemctl restart "$SERVICE_NAME"; systemctl --no-pager status "$SERVICE_NAME" || true; }
 stop_service(){ systemctl stop "$SERVICE_NAME" || true; ok "Служба остановлена."; }
-install_menu_command(){ install -m 0755 "$0" "$MENU_PATH"; ok "Команда установлена: gost-menu"; }
+install_menu_command(){
+  make_config_dir
+  local tmp source_file
+  tmp="$(mktemp)"
+  source_file="${BASH_SOURCE[0]:-$0}"
+
+  # При запуске через bash <(curl ...) скрипт живёт как /dev/fd/XX.
+  # Старый вариант install "$0" часто копировал не тот файл или пустышку.
+  if [[ -r "$source_file" ]]; then
+    cat "$source_file" > "$tmp" || true
+  fi
+
+  # Если самокопирование не удалось, берём актуальный скрипт с GitHub RAW.
+  if [[ ! -s "$tmp" ]] || ! bash -n "$tmp" >/dev/null 2>&1; then
+    warn "Не удалось корректно скопировать текущий скрипт, скачиваю с GitHub..."
+    curl -fsSL "$RAW_URL" -o "$tmp"
+  fi
+
+  bash -n "$tmp"
+  install -m 0755 "$tmp" "$MENU_PATH"
+  ln -sf "$MENU_PATH" /usr/bin/gost-menu 2>/dev/null || true
+  rm -f "$tmp"
+  hash -r 2>/dev/null || true
+
+  ok "Команда установлена: gost-menu"
+  info "Путь: $(command -v gost-menu || echo "$MENU_PATH")"
+  warn "Если команда не запускается в текущей SSH-сессии, выйди из неё и зайди заново, либо выполни: hash -r"
+}
 
 self_update(){
   local url
