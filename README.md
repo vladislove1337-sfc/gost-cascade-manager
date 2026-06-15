@@ -1,139 +1,207 @@
 # GOST Cascade Manager
 
-<p align="center">
-  <img src="assets/banner (3).png" width="800">
-</p>
+Меню-скрипт для настройки аварийного каскада на GOST v3.
 
-<h1 align="center">
-SingBox Node Cascade Manager
-</h1>
-
-Меню для аварийного каскада на GOST v3.
-
-Базовая рабочая схема:
+Схема работы:
 
 ```text
-Клиент -> RU VPS SOCKS5 -> FOREIGN VPS socks5+tls -> Интернет
+Клиент / v2rayN / браузер
+        ↓
+RU VPS — локальный SOCKS5 вход
+        ↓
+FOREIGN VPS — выходной узел
+        ↓
+Internet
 ```
 
-Дополнительная WSS-схема:
+Скрипт не трогает Xray, sing-box, 3x-ui, nginx и другие ваши сервисы. Он управляет только службой `gost.service`, бинарником `/usr/local/bin/gost` и каталогом `/etc/gost-cascade`.
 
-```text
-Клиент -> RU VPS SOCKS5 -> FOREIGN VPS relay+wss -> Интернет
-```
+---
 
-Это отдельная резервная схема. Она не трогает Xray, sing-box, 3x-ui, nginx и существующие конфиги.
-
-## Установка одной командой
+## Установка
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh)
 ```
 
-## Запуск меню после установки
-
-После установки команды меню запускается так:
-
-```bash
-gost-menu
-```
-
-Если команда отсутствует, запусти меню через raw-ссылку и выбери:
+После первой установки можно установить короткую команду через пункт меню:
 
 ```text
 8) Установить команду gost-menu
 ```
 
-## Что есть в этой версии
+После этого меню запускается так:
 
-- Основной рабочий режим `socks5+tls`.
-- QR-code для ссылки подключения через `qrencode`.
-- Тест каскада через `api.ipify.org`.
-- Меню по умолчанию на русском.
-- Добавлен FOREIGN-режим `relay+wss` без auth между RU и FOREIGN. Это исправляет ошибку `illegal base64 data at input byte 5`.
-
-## Рекомендуемая настройка SOCKS5 + TLS
-
-### 1. На FOREIGN VPS
-
-Запусти меню и выбери:
-
-```text
-1) Установить FOREIGN выходной узел: socks5+tls
+```bash
+gost-menu
 ```
 
-Пример результата:
+---
+
+## Основные режимы
+
+### 1. Стабильный режим: SOCKS5 + TLS
 
 ```text
-socks5+tls://prado:1234567890@FOREIGN_IP:443
+Клиент
+ ↓
+RU VPS: SOCKS5
+ ↓
+socks5+tls
+ ↓
+FOREIGN VPS
+ ↓
+Internet
 ```
 
-Скопируй эту ссылку и замени `FOREIGN_IP` на настоящий IP иностранного VPS.
+Это самый простой и стабильный режим, который рекомендуется использовать первым.
 
-### 2. На RU VPS
+---
 
-Запусти меню и выбери:
+### 2. WSS/TLS режим: relay+wss
 
 ```text
-3) Установить RU промежуточный узел: локальный SOCKS5 -> FOREIGN
+Клиент
+ ↓
+RU VPS: SOCKS5
+ ↓
+relay+wss / HTTPS WebSocket / 443
+ ↓
+FOREIGN VPS
+ ↓
+Internet
 ```
 
-В поле FOREIGN URL вставь ссылку вида:
+В этом режиме участок `RU VPS -> FOREIGN VPS` идёт через WSS на 443 порту.
+
+Важно: в режиме `relay+wss` авторизация `auth=user:password` между RU и FOREIGN не используется. Авторизация остаётся на входе RU SOCKS5.
+
+Рабочая схема:
+
+FOREIGN:
 
 ```text
-socks5+tls://prado:1234567890@222.222.222.222:443
+relay+wss://:443?path=/api/socket&certFile=...&keyFile=...
 ```
 
-После установки выбери:
-
-```text
-12) Показать ссылку подключения и QR-code
-```
-
-## Режим relay+wss
-
-На FOREIGN VPS выбери:
-
-```text
-14) Установить FOREIGN выходной узел: relay+wss  WSS/TLS ТУННЕЛЬ
-```
-
-Меню выдаст ссылку вида:
+RU:
 
 ```text
 relay+wss://FOREIGN_IP:443?path=/api/socket&secure=false
 ```
 
-На RU VPS выбери пункт 3 и вставь эту ссылку, заменив `FOREIGN_IP` на настоящий IP иностранного VPS.
+При использовании настоящего сертификата Let's Encrypt `secure=false` больше не нужен.
 
-Важно: в `relay+wss` логин/пароль между RU и FOREIGN не указываются. Авторизация остаётся на входе RU SOCKS5. Это сделано специально: параметр `auth=user:pass` в `relay+wss` на GOST v3 приводил к падению FOREIGN с ошибкой `illegal base64 data at input byte 5`. Основным стабильным вариантом всё равно остаётся `socks5+tls`, который уже проверен.
+---
 
-## Проверка
+## Настройка домена и Let's Encrypt
 
-На RU VPS:
-
-```bash
-curl -x socks5h://USER:PASS@127.0.0.1:1080 https://api.ipify.org ; echo
-```
-
-Должен вернуться IP FOREIGN VPS.
-
-## v2rayN
-
-Добавь сервер типа SOCKS:
+Если у вас есть домен, можно сделать A-запись на FOREIGN VPS:
 
 ```text
-Адрес: IP RU VPS
-Порт: 1080
-Логин: указанный логин
-Пароль: указанный пароль
+ваш домен (example.com) -> IP вашего FOREIGN VPS
 ```
 
-Сайты должны видеть IP иностранного VPS.
+После обновления DNS на FOREIGN VPS откройте меню и выберите:
+
+```text
+15) Настроить домен и Let's Encrypt для FOREIGN relay+wss
+```
+
+Скрипт:
+
+- проверит, что домен указывает на IP текущего FOREIGN VPS;
+- остановит `gost.service`;
+- установит `certbot`;
+- получит сертификат Let's Encrypt;
+- перепишет `gost.service` на сертификаты из `/etc/letsencrypt/live/...`;
+- запустит GOST обратно.
+
+Если DNS ещё не обновился, скрипт покажет, какую A-запись нужно создать.
+
+Для выпуска Let's Encrypt сертификата сервер должен быть доступен по домену извне. Обычно также нужно, чтобы порт `80/tcp` не был заблокирован firewall-ом или панелью хостера.
+
+---
+
+## Переключение RU на домен FOREIGN
+
+После получения сертификата на FOREIGN VPS на RU VPS выберите:
+
+```text
+16) Переключить FOREIGN адрес на домен на RU
+```
+
+Скрипт заменит FOREIGN IP на домен в строке `-F`.
+
+Было:
+
+```text
+relay+wss://123.123.123.123:443?path=/api/socket&secure=false
+```
+
+Станет:
+
+```text
+relay+wss://example.com:443?path=/api/socket
+```
+
+---
+
+## QR-code и ссылка подключения
+
+На RU VPS выберите:
+
+```text
+12) Показать ссылку подключения и QR-code
+```
+
+Скрипт покажет SOCKS5-ссылку вида:
+
+```text
+socks://user:password@RU_IP:1080
+```
+
+И QR-code для быстрого добавления в клиент, если установлен `qrencode`.
+
+---
+
+## Проверка каскада
+
+На RU VPS выберите:
+
+```text
+13) Проверить каскад через api.ipify.org
+```
+
+Или вручную:
+
+```bash
+curl -x socks5h://user:password@127.0.0.1:1080 https://api.ipify.org ; echo
+```
+
+Если всё работает, команда покажет IP FOREIGN VPS.
+
+---
+
+## Backup и откат
+
+Перед изменением `gost.service` скрипт создаёт backup:
+
+```text
+/etc/systemd/system/gost.service.backup
+```
+
+Для отката выберите:
+
+```text
+17) Восстановить backup gost.service
+```
+
+---
 
 ## Обновление
 
-В меню выбери:
+Через меню:
 
 ```text
 9) Обновить меню с GitHub
@@ -142,23 +210,22 @@ curl -x socks5h://USER:PASS@127.0.0.1:1080 https://api.ipify.org ; echo
 Или вручную:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh -o /usr/local/bin/gost-menu
-chmod +x /usr/local/bin/gost-menu
+bash <(curl -fsSL https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh)
 ```
 
-## Удаление
+---
 
-В меню выбери:
+## Удаление
 
 ```text
 10) Полностью удалить GOST cascade
 ```
 
-Удаляются только:
+Удаляется только GOST Cascade Manager:
 
-```text
-/usr/local/bin/gost
-/usr/local/bin/gost-menu
-/etc/gost-cascade/
-/etc/systemd/system/gost.service
-```
+- `gost.service`;
+- `/usr/local/bin/gost`;
+- `/usr/local/bin/gost-menu`;
+- `/etc/gost-cascade`.
+
+Xray, sing-box, 3x-ui и другие сервисы не трогаются.

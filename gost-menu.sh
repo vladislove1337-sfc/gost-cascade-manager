@@ -9,6 +9,7 @@ CONFIG_DIR="/etc/gost-cascade"
 CONFIG_FILE="$CONFIG_DIR/config.env"
 LANG_FILE="$CONFIG_DIR/lang"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+SERVICE_BACKUP_FILE="/etc/systemd/system/${SERVICE_NAME}.service.backup"
 RAW_URL="https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
@@ -55,7 +56,7 @@ random_string(){ openssl rand -hex 12; }
 install_deps(){
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
-  apt-get install -y curl wget tar gzip ca-certificates jq openssl qrencode netcat-openbsd
+  apt-get install -y curl wget tar gzip ca-certificates jq openssl qrencode netcat-openbsd dnsutils
 }
 
 detect_arch(){
@@ -91,6 +92,41 @@ install_gost_binary(){
   "$BIN_PATH" -V || true
 }
 
+
+backup_service(){
+  if [[ -f "$SERVICE_FILE" ]]; then
+    cp -a "$SERVICE_FILE" "$SERVICE_BACKUP_FILE"
+    ok "Создан backup: $SERVICE_BACKUP_FILE"
+  fi
+}
+
+restore_backup(){
+  if [[ ! -f "$SERVICE_BACKUP_FILE" ]]; then
+    err "Backup не найден: $SERVICE_BACKUP_FILE"
+    return 1
+  fi
+  cp -a "$SERVICE_BACKUP_FILE" "$SERVICE_FILE"
+  systemctl daemon-reload
+  systemctl restart "$SERVICE_NAME" || true
+  ok "Backup восстановлен."
+  systemctl --no-pager status "$SERVICE_NAME" || true
+}
+
+extract_url_param(){
+  local url="$1" key="$2"
+  echo "$url" | tr '&' '
+' | sed -n "s/^.*[?&]${key}=//p" | head -n1 | cut -d'&' -f1
+}
+
+extract_port(){
+  local url="$1" default_port="${2:-443}"
+  local no_query hostport port
+  no_query="${url%%\?*}"
+  hostport="${no_query##*@}"
+  port="${hostport##*:}"
+  if [[ "$port" =~ ^[0-9]+$ ]]; then echo "$port"; else echo "$default_port"; fi
+}
+
 write_config(){
   make_config_dir
   cat > "$CONFIG_FILE" <<EOF_CFG
@@ -108,6 +144,7 @@ EOF_CFG
 
 write_service(){
   local listen_arg="$1" forward_arg="${2:-}"
+  backup_service
   if [[ -n "$forward_arg" ]]; then
     cat > "$SERVICE_FILE" <<EOF_SERVICE
 [Unit]
@@ -280,6 +317,100 @@ test_cascade(){
   curl -x "$proxy" --max-time 15 https://api.ipify.org ; echo
 }
 
+
+setup_domain_letsencrypt(){
+  load_config_env || return 0
+  if [[ "${MODE:-}" != foreign-relay-wss* ]]; then
+    warn "Этот пункт запускается на FOREIGN relay+wss узле. Сейчас режим: ${MODE:-unknown}"
+    warn "Сначала установи FOREIGN relay+wss через пункт 14."
+    return 0
+  fi
+
+  local domain server_ip dns_ip port path cert key listen
+  domain="$(ask 'Введите ваш домен (example.com)')"
+  if [[ -z "$domain" ]]; then warn "Домен не указан."; return 0; fi
+
+  server_ip="$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
+  dns_ip="$(dig +short A "$domain" | tail -n1 || true)"
+
+  echo
+  info "Проверка DNS:"
+  echo "Домен: $domain"
+  echo "A-запись домена: ${dns_ip:-не найдена}"
+  echo "IP этого сервера: $server_ip"
+
+  if [[ -z "$dns_ip" || "$dns_ip" != "$server_ip" ]]; then
+    err "DNS пока не указывает на этот FOREIGN VPS."
+    warn "Создай или проверь A-запись:"
+    echo "$domain -> $server_ip"
+    warn "После обновления DNS запусти этот пункт снова."
+    return 1
+  fi
+
+  port="$(extract_port "${LISTEN:-}" 443)"
+  path="$(extract_url_param "${LISTEN:-}" path)"
+  [[ -n "$path" ]] || path="/api/socket"
+
+  install_deps
+  apt-get install -y certbot
+
+  backup_service
+  systemctl stop "$SERVICE_NAME" || true
+
+  certbot certonly --standalone -d "$domain"
+
+  cert="/etc/letsencrypt/live/${domain}/fullchain.pem"
+  key="/etc/letsencrypt/live/${domain}/privkey.pem"
+  if [[ ! -f "$cert" || ! -f "$key" ]]; then
+    err "Сертификат не найден после certbot. Возвращаю службу как была."
+    systemctl restart "$SERVICE_NAME" || true
+    return 1
+  fi
+
+  listen="relay+wss://:${port}?path=${path}&certFile=${cert}&keyFile=${key}"
+  write_service "$listen"
+  write_config "foreign-relay-wss-letsencrypt" "$listen" "" "" "" "" "$domain" "FOREIGN relay+wss с Let's Encrypt"
+  ok "Домен и Let's Encrypt настроены."
+  warn "На RU VPS теперь можно переключить FOREIGN адрес на домен через пункт 16."
+  echo "relay+wss://${domain}:${port}?path=${path}"
+}
+
+switch_foreign_to_domain(){
+  load_config_env || return 0
+  if [[ "${MODE:-}" != "ru-socks-to-foreign" ]]; then
+    warn "Этот пункт запускается на RU узле. Сейчас режим: ${MODE:-unknown}"
+    return 0
+  fi
+
+  local domain port path new_forward listen
+  domain="$(ask 'Введите домен вашего FOREIGN VPS (example.com)')"
+  if [[ -z "$domain" ]]; then warn "Домен не указан."; return 0; fi
+
+  port="$(extract_port "${FORWARD:-}" 443)"
+  path="$(extract_url_param "${FORWARD:-}" path)"
+  [[ -n "$path" ]] || path="/api/socket"
+
+  if [[ "${FORWARD:-}" == relay+wss://* ]]; then
+    new_forward="relay+wss://${domain}:${port}?path=${path}"
+  elif [[ "${FORWARD:-}" == socks5+wss://* ]]; then
+    warn "Обнаружен socks5+wss. Для self-signed сертификата может быть нужен secure=false."
+    new_forward="socks5+wss://${domain}:${port}?path=${path}"
+  elif [[ "${FORWARD:-}" == socks5+tls://* ]]; then
+    warn "Обнаружен socks5+tls. Переключаю только адрес на домен, логин/пароль сохранить автоматически сложно."
+    warn "Для socks5+tls лучше переустановить RU пунктом 3 и указать полный FOREIGN URL с доменом."
+    return 1
+  else
+    err "Неизвестный FOREIGN URL: ${FORWARD:-empty}"
+    return 1
+  fi
+
+  listen="${LISTEN}"
+  write_service "$listen" "$new_forward"
+  write_config "ru-socks-to-foreign" "$listen" "$new_forward" "${SOCKS_USER:-}" "${SOCKS_PASS:-}" "${SOCKS_PORT:-}" "$domain" "RU промежуточный узел: SOCKS5 -> FOREIGN domain"
+  ok "RU переключён на домен FOREIGN."
+  echo "Новый FORWARD: $new_forward"
+}
+
 show_status(){
   info "Бинарник GOST:"
   if [[ -x "$BIN_PATH" ]]; then "$BIN_PATH" -V || true; else echo "Не установлен"; fi
@@ -344,6 +475,9 @@ print_menu_ru(){
   echo "12) Показать ссылку подключения и QR-code"
   echo "13) Проверить каскад через api.ipify.org"
   echo "14) Установить FOREIGN выходной узел: relay+wss  WSS/TLS ТУННЕЛЬ"
+  echo "15) Настроить домен и Let's Encrypt для FOREIGN relay+wss"
+  echo "16) Переключить FOREIGN адрес на домен на RU"
+  echo "17) Восстановить backup gost.service"
   echo "0) Выход"
 }
 print_menu_en(){
@@ -363,6 +497,9 @@ print_menu_en(){
   echo "12) Show connection link and QR-code"
   echo "13) Test cascade through api.ipify.org"
   echo "14) Install FOREIGN exit node: relay+wss WSS/TLS tunnel"
+  echo "15) Configure domain and Let's Encrypt for FOREIGN relay+wss"
+  echo "16) Switch FOREIGN address to domain on RU"
+  echo "17) Restore gost.service backup"
   echo "0) Exit"
 }
 
@@ -387,6 +524,9 @@ main_menu(){
       12) show_client_link; pause ;;
       13) test_cascade; pause ;;
       14) install_foreign_relay_wss; pause ;;
+      15) setup_domain_letsencrypt; pause ;;
+      16) switch_foreign_to_domain; pause ;;
+      17) restore_backup; pause ;;
       0) exit 0 ;;
       *) warn "$(msg wrong)"; sleep 1 ;;
     esac

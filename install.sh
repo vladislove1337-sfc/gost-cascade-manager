@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-RAW_URL="https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh"
-MENU_PATH="/usr/local/bin/gost-menu"
+URL="https://raw.githubusercontent.com/vladislove1337-sfc/gost-cascade-manager/main/gost-menu.sh"
+TMP="/tmp/gost-menu.sh"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   echo "Запусти от root: sudo bash install.sh"
@@ -10,7 +10,8 @@ fi
 
 apt-get update -y
 apt-get install -y curl ca-certificates
-curl -fL "$RAW_URL" -o "$MENU_PATH"
-chmod +x "$MENU_PATH"
-echo "Готово. Запуск: gost-menu"
+curl -fsSL "$URL" -o "$TMP"
+bash -n "$TMP"
+install -m 0755 "$TMP" /usr/local/bin/gost-menu
+echo "Готово. Запуск меню: gost-menu"
 gost-menu
