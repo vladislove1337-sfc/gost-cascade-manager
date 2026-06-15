@@ -1,7 +1,7 @@
 # GOST Cascade Manager
 
 <p align="center">
-  <img src="assets/banner(3).png" width="800">
+  <img src="assets/banner (3).png" width="800">
 </p>
 
 <h1 align="center">
