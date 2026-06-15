@@ -5,8 +5,6 @@
 </p>
 
 <h1 align="center">
-SingBox Node Cascade Manager
-</h1>
 
 Меню для аварийного каскада на GOST v3.
 
