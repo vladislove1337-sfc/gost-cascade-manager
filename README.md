@@ -1,11 +1,5 @@
 # GOST Cascade Manager
 
-<p align="center">
-  <img src="assets/banner (3).png" width="800">
-</p>
-
-<h1 align="center">
-
 Меню для аварийного каскада на GOST v3.
 
 Базовая рабочая схема:
