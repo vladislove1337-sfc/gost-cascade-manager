@@ -1,5 +1,13 @@
 # GOST Cascade Manager
 
+<p align="center">
+  <img src="assets/banner.png" width="800">
+</p>
+
+<h1 align="center">
+SingBox Node Cascade Manager
+</h1>
+
 Меню-скрипт для настройки аварийного каскада на GOST v3.
 
 Схема работы:
