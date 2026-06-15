@@ -184,25 +184,28 @@ install_foreign_wss(){
 
 install_foreign_relay_wss(){
   install_gost_binary; make_config_dir
-  local user pass port path domain cert key listen url
-  user="$(ask 'Логин для FOREIGN relay+wss' 'prado')"
-  pass="$(ask 'Пароль для FOREIGN relay+wss' "$(random_string)")"
+  local port path domain cert key listen url
   port="$(ask 'Порт FOREIGN relay+wss' '443')"
   path="$(ask 'WSS путь' '/api/socket')"
-  domain="$(ask 'Домен для self-signed сертификата CN' 'example.com')"
+  domain="$(ask 'Домен для self-signed сертификата CN' 'gost.local')"
   cert="$CONFIG_DIR/relay-wss-cert.pem"; key="$CONFIG_DIR/relay-wss-key.pem"
   openssl req -x509 -newkey rsa:2048 -nodes -keyout "$key" -out "$cert" -days 3650 -subj "/CN=$domain" >/dev/null 2>&1
   chmod 600 "$cert" "$key"
-  listen="relay+wss://:${port}?auth=${user}:${pass}&path=${path}&certFile=${cert}&keyFile=${key}"
-  url="relay+wss://${user}:${pass}@FOREIGN_IP:${port}?path=${path}"
+
+  # ВАЖНО: для relay+wss в GOST v3 не используем ?auth=user:pass.
+  # На практике это приводило к ошибке: illegal base64 data at input byte 5.
+  # Авторизация остаётся на входе RU SOCKS5, а канал RU -> FOREIGN закрыт WSS/TLS.
+  listen="relay+wss://:${port}?path=${path}&certFile=${cert}&keyFile=${key}"
+  url="relay+wss://FOREIGN_IP:${port}?path=${path}&secure=false"
+
   write_service "$listen"
-  write_config "foreign-relay-wss-selfsigned" "$listen" "" "" "" "" "" "FOREIGN выходной узел relay+wss self-signed"
+  write_config "foreign-relay-wss-selfsigned" "$listen" "" "" "" "" "" "FOREIGN выходной узел relay+wss self-signed без auth"
   ok "FOREIGN VPS установлен в режиме relay+wss self-signed."
   echo
   warn "На RU VPS в пункте 3 укажи такой URL, заменив FOREIGN_IP на IP иностранного VPS:"
   echo "$url"
   echo
-  warn "Важно: если используешь self-signed сертификат, проверка сертификата на клиентской стороне должна быть выключена. В GOST secure по умолчанию false."
+  warn "Важно: логин/пароль для relay+wss не указываем. Авторизация остаётся на RU SOCKS5."
 }
 
 install_ru_node(){
@@ -340,7 +343,7 @@ print_menu_ru(){
   echo "11) Сменить язык"
   echo "12) Показать ссылку подключения и QR-code"
   echo "13) Проверить каскад через api.ipify.org"
-  echo "14) Установить FOREIGN выходной узел: relay+wss  ЭКСПЕРИМЕНТАЛЬНО"
+  echo "14) Установить FOREIGN выходной узел: relay+wss  WSS/TLS ТУННЕЛЬ"
   echo "0) Выход"
 }
 print_menu_en(){
@@ -359,7 +362,7 @@ print_menu_en(){
   echo "11) Change language"
   echo "12) Show connection link and QR-code"
   echo "13) Test cascade through api.ipify.org"
-  echo "14) Install FOREIGN exit node: relay+wss EXPERIMENTAL"
+  echo "14) Install FOREIGN exit node: relay+wss WSS/TLS tunnel"
   echo "0) Exit"
 }
 

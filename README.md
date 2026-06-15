@@ -8,7 +8,7 @@
 Клиент -> RU VPS SOCKS5 -> FOREIGN VPS socks5+tls -> Интернет
 ```
 
-Дополнительная экспериментальная схема:
+Дополнительная WSS-схема:
 
 ```text
 Клиент -> RU VPS SOCKS5 -> FOREIGN VPS relay+wss -> Интернет
@@ -42,7 +42,7 @@ gost-menu
 - QR-code для ссылки подключения через `qrencode`.
 - Тест каскада через `api.ipify.org`.
 - Меню по умолчанию на русском.
-- Добавлен экспериментальный FOREIGN-режим `relay+wss`.
+- Добавлен FOREIGN-режим `relay+wss` без auth между RU и FOREIGN. Это исправляет ошибку `illegal base64 data at input byte 5`.
 
 ## Рекомендуемая настройка SOCKS5 + TLS
 
@@ -82,23 +82,23 @@ socks5+tls://prado:1234567890@194.116.172.222:443
 12) Показать ссылку подключения и QR-code
 ```
 
-## Экспериментальный режим relay+wss
+## Режим relay+wss
 
 На FOREIGN VPS выбери:
 
 ```text
-14) Установить FOREIGN выходной узел: relay+wss  ЭКСПЕРИМЕНТАЛЬНО
+14) Установить FOREIGN выходной узел: relay+wss  WSS/TLS ТУННЕЛЬ
 ```
 
 Меню выдаст ссылку вида:
 
 ```text
-relay+wss://prado:1234567890@FOREIGN_IP:443?path=/api/socket
+relay+wss://FOREIGN_IP:443?path=/api/socket&secure=false
 ```
 
 На RU VPS выбери пункт 3 и вставь эту ссылку, заменив `FOREIGN_IP` на настоящий IP иностранного VPS.
 
-Важно: режим `relay+wss` добавлен как запасной вариант. Основным стабильным вариантом остаётся `socks5+tls`, который уже проверен.
+Важно: в `relay+wss` логин/пароль между RU и FOREIGN не указываются. Авторизация остаётся на входе RU SOCKS5. Это сделано специально: параметр `auth=user:pass` в `relay+wss` на GOST v3 приводил к падению FOREIGN с ошибкой `illegal base64 data at input byte 5`. Основным стабильным вариантом всё равно остаётся `socks5+tls`, который уже проверен.
 
 ## Проверка
 
