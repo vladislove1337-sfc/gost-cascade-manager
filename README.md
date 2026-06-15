@@ -1,3 +1,11 @@
+<p align="center">
+  <img src="assets/banner (3).png" width="800">
+</p>
+
+<h1 align="center">
+GOST Cascade Manager
+</h1>
+
 # GOST Cascade Manager
 
 Меню-скрипт для настройки аварийного каскада на GOST v3.
